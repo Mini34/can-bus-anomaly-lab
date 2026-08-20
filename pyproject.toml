@@ -1,0 +1,11 @@
+[project]
+name = "can-bus-anomaly-lab"
+version = "0.1.0"
+description = "A deterministic CAN traffic simulator and defensive anomaly detector"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Mina Soliman" }]
+
+[project.scripts]
+can-anomaly-lab = "can_anomaly_lab.cli:main"
+
