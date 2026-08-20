@@ -32,7 +32,24 @@ class CanDetectorTests(unittest.TestCase):
         events = detector.inspect(CanFrame(0.2, 0x100, (7,)))
         self.assertIn("counter_jump", {event.category for event in events})
 
+    def test_invalid_rules_are_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            CanRule(0.0, {})
+        with self.assertRaises(ValueError):
+            CanRule(10.0, {8: (0, 10)})
+        with self.assertRaises(ValueError):
+            CanRule(10.0, {0: (20, 10)})
+        with self.assertRaises(ValueError):
+            CanRule(10.0, {}, counter_modulus=0)
+
+    def test_timestamp_regression_does_not_replace_last_good_timestamp(self) -> None:
+        detector = Detector({0x100: CanRule(10.0, {})})
+        detector.inspect(CanFrame(1.0, 0x100, ()))
+        regression = detector.inspect(CanFrame(0.5, 0x100, ()))
+        following = detector.inspect(CanFrame(0.56, 0x100, ()))
+        self.assertIn("timestamp_regression", {event.category for event in regression})
+        self.assertIn("timestamp_regression", {event.category for event in following})
+
 
 if __name__ == "__main__":
     unittest.main()
-

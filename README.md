@@ -18,11 +18,22 @@ network behaviour can be monitored with transparent, deterministic rules.
 ## Run it
 
 ```powershell
+python -m pip install .
+can-anomaly-lab
+can-anomaly-lab --normal-only
+can-anomaly-lab --report reports/demo.json
+
+# The module form works without installation from the repository root.
 python -m can_anomaly_lab.cli
 python -m can_anomaly_lab.cli --normal-only
 python -m can_anomaly_lab.cli --report reports/demo.json
 python -m unittest discover -s tests -v
 ```
+
+The deterministic demonstration processes 28 frames and reports five explainable
+findings: one unknown identifier, one payload-range violation, one rate spike, and two
+rolling-counter jumps. `--normal-only` processes the 24-frame benign baseline without
+findings.
 
 ## Architecture
 
@@ -49,4 +60,3 @@ This simulation does not connect to a vehicle or physical CAN adapter. Static ru
 miss slow or context-dependent attacks and may require model-specific calibration. A
 hardware extension would use an isolated development bus, a USB-CAN adapter, recorded
 benign traffic, and strict safety boundaries—never a live safety-critical system.
-

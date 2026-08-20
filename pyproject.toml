@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "can-bus-anomaly-lab"
 version = "0.1.0"
@@ -8,4 +12,3 @@ authors = [{ name = "Mina Soliman" }]
 
 [project.scripts]
 can-anomaly-lab = "can_anomaly_lab.cli:main"
-

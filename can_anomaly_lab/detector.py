@@ -27,6 +27,19 @@ class CanRule:
     counter_index: int | None = None
     counter_modulus: int = 16
 
+    def __post_init__(self) -> None:
+        if self.max_rate_hz <= 0:
+            raise ValueError("max_rate_hz must be positive")
+        if self.counter_modulus <= 0:
+            raise ValueError("counter_modulus must be positive")
+        if self.counter_index is not None and not 0 <= self.counter_index <= 7:
+            raise ValueError("counter_index must identify a CAN payload byte")
+        for index, (minimum, maximum) in self.byte_ranges.items():
+            if not 0 <= index <= 7:
+                raise ValueError("byte range indices must be between zero and seven")
+            if not 0 <= minimum <= maximum <= 255:
+                raise ValueError("byte ranges must be ordered values between zero and 255")
+
 
 @dataclass(frozen=True)
 class Anomaly:
@@ -56,7 +69,9 @@ class Detector:
             interval = frame.timestamp_s - previous_time
             minimum_interval = 1.0 / (rule.max_rate_hz * self.rate_tolerance)
             if interval < 0:
-                anomalies.append(self._event(frame, "timestamp_regression", "timestamp moved backwards"))
+                anomalies.append(
+                    self._event(frame, "timestamp_regression", "timestamp moved backwards")
+                )
             elif interval < minimum_interval:
                 anomalies.append(
                     self._event(
@@ -65,7 +80,8 @@ class Detector:
                         f"interval {interval:.6f}s is below {minimum_interval:.6f}s",
                     )
                 )
-        self._last_seen[frame.arbitration_id] = frame.timestamp_s
+        if previous_time is None or frame.timestamp_s >= previous_time:
+            self._last_seen[frame.arbitration_id] = frame.timestamp_s
 
         for index, (minimum, maximum) in rule.byte_ranges.items():
             if index >= len(frame.data):
@@ -82,7 +98,11 @@ class Detector:
         if rule.counter_index is not None:
             if rule.counter_index >= len(frame.data):
                 anomalies.append(
-                    self._event(frame, "short_payload", f"counter byte {rule.counter_index} is missing")
+                    self._event(
+                        frame,
+                        "short_payload",
+                        f"counter byte {rule.counter_index} is missing",
+                    )
                 )
             else:
                 present = frame.data[rule.counter_index] % rule.counter_modulus
@@ -101,4 +121,3 @@ class Detector:
     @staticmethod
     def _event(frame: CanFrame, category: str, detail: str) -> Anomaly:
         return Anomaly(frame.timestamp_s, frame.arbitration_id, category, detail)
-
