@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 
 @dataclass(frozen=True)
@@ -12,12 +13,19 @@ class CanFrame:
     data: tuple[int, ...]
 
     def __post_init__(self) -> None:
-        if self.timestamp_s < 0:
-            raise ValueError("timestamp cannot be negative")
-        if not 0 <= self.arbitration_id <= 0x7FF:
+        if not isfinite(self.timestamp_s) or self.timestamp_s < 0:
+            raise ValueError("timestamp must be finite and non-negative")
+        if (
+            not isinstance(self.arbitration_id, int)
+            or isinstance(self.arbitration_id, bool)
+            or not 0 <= self.arbitration_id <= 0x7FF
+        ):
             raise ValueError("only 11-bit CAN identifiers are supported")
-        if len(self.data) > 8 or any(not 0 <= byte <= 255 for byte in self.data):
-            raise ValueError("CAN data must contain zero to eight byte values")
+        if len(self.data) > 8 or any(
+            not isinstance(byte, int) or isinstance(byte, bool) or not 0 <= byte <= 255
+            for byte in self.data
+        ):
+            raise ValueError("CAN data must contain zero to eight integer byte values")
 
 
 @dataclass(frozen=True)
@@ -28,17 +36,37 @@ class CanRule:
     counter_modulus: int = 16
 
     def __post_init__(self) -> None:
-        if self.max_rate_hz <= 0:
-            raise ValueError("max_rate_hz must be positive")
-        if self.counter_modulus <= 0:
-            raise ValueError("counter_modulus must be positive")
-        if self.counter_index is not None and not 0 <= self.counter_index <= 7:
+        if not isfinite(self.max_rate_hz) or self.max_rate_hz <= 0:
+            raise ValueError("max_rate_hz must be finite and positive")
+        if (
+            not isinstance(self.counter_modulus, int)
+            or isinstance(self.counter_modulus, bool)
+            or not 1 <= self.counter_modulus <= 256
+        ):
+            raise ValueError("counter_modulus must be an integer between one and 256")
+        if self.counter_index is not None and (
+            not isinstance(self.counter_index, int)
+            or isinstance(self.counter_index, bool)
+            or not 0 <= self.counter_index <= 7
+        ):
             raise ValueError("counter_index must identify a CAN payload byte")
         for index, (minimum, maximum) in self.byte_ranges.items():
-            if not 0 <= index <= 7:
+            if (
+                not isinstance(index, int)
+                or isinstance(index, bool)
+                or not 0 <= index <= 7
+            ):
                 raise ValueError("byte range indices must be between zero and seven")
-            if not 0 <= minimum <= maximum <= 255:
-                raise ValueError("byte ranges must be ordered values between zero and 255")
+            if (
+                not isinstance(minimum, int)
+                or not isinstance(maximum, int)
+                or isinstance(minimum, bool)
+                or isinstance(maximum, bool)
+                or not 0 <= minimum <= maximum <= 255
+            ):
+                raise ValueError(
+                    "byte ranges must be ordered integer values between zero and 255"
+                )
 
 
 @dataclass(frozen=True)
@@ -51,8 +79,8 @@ class Anomaly:
 
 class Detector:
     def __init__(self, rules: dict[int, CanRule], rate_tolerance: float = 1.25) -> None:
-        if rate_tolerance < 1:
-            raise ValueError("rate_tolerance must be at least one")
+        if not isfinite(rate_tolerance) or rate_tolerance < 1:
+            raise ValueError("rate_tolerance must be finite and at least one")
         self.rules = rules
         self.rate_tolerance = rate_tolerance
         self._last_seen: dict[int, float] = {}
@@ -64,11 +92,13 @@ class Detector:
             return [self._event(frame, "unknown_id", "identifier is not in the allowlist")]
 
         anomalies: list[Anomaly] = []
+        timestamp_regressed = False
         previous_time = self._last_seen.get(frame.arbitration_id)
         if previous_time is not None:
             interval = frame.timestamp_s - previous_time
             minimum_interval = 1.0 / (rule.max_rate_hz * self.rate_tolerance)
             if interval < 0:
+                timestamp_regressed = True
                 anomalies.append(
                     self._event(frame, "timestamp_regression", "timestamp moved backwards")
                 )
@@ -105,9 +135,26 @@ class Detector:
                     )
                 )
             else:
-                present = frame.data[rule.counter_index] % rule.counter_modulus
+                raw_counter = frame.data[rule.counter_index]
+                if raw_counter >= rule.counter_modulus:
+                    anomalies.append(
+                        self._event(
+                            frame,
+                            "counter_range",
+                            (
+                                f"counter value {raw_counter} is outside "
+                                f"[0, {rule.counter_modulus - 1}]"
+                            ),
+                        )
+                    )
+                    return anomalies
+                present = raw_counter
                 previous = self._last_counter.get(frame.arbitration_id)
-                if previous is not None and present != (previous + 1) % rule.counter_modulus:
+                if (
+                    not timestamp_regressed
+                    and previous is not None
+                    and present != (previous + 1) % rule.counter_modulus
+                ):
                     anomalies.append(
                         self._event(
                             frame,
@@ -115,7 +162,8 @@ class Detector:
                             f"counter moved from {previous} to {present}",
                         )
                     )
-                self._last_counter[frame.arbitration_id] = present
+                if not timestamp_regressed:
+                    self._last_counter[frame.arbitration_id] = present
         return anomalies
 
     @staticmethod

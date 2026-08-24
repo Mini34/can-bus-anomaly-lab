@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from .detector import CanFrame, CanRule
 
-
 DEFAULT_RULES = {
     0x100: CanRule(max_rate_hz=20.0, byte_ranges={0: (0, 200)}, counter_index=1),
     0x220: CanRule(max_rate_hz=10.0, byte_ranges={0: (0, 120), 1: (0, 120)}, counter_index=2),

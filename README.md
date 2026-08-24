@@ -13,7 +13,9 @@ network behaviour can be monitored with transparent, deterministic rules.
 - Payload bytes outside engineering ranges
 - Missing payload fields
 - Rolling-counter jumps
+- Counter values outside the configured modulus
 - Timestamp regression
+- Non-finite timing/rate values and non-integer protocol bytes
 
 ## Run it
 
